@@ -86,3 +86,79 @@ void launch_program(char *args[], int argsc)
     
 
 }
+
+int command_with_redirection(char line[]){
+    for (int i = 0; i < strlen(line); i++){
+        if (line[i]=='<'){
+            return(1);
+        }
+        if (line[i]=='>'){
+            return(1);
+        }
+
+    }
+    return(0);
+
+}
+void launch_program_with_redirection(char *args[], int argsc){
+    int rc = fork();
+        if (rc == 0){
+
+            for (int i = 0; i < argsc; i++){
+                char *filename = args[i + 1];
+                if (strcmp(args[i],"<")==0){
+                    if (filename == NULL) {
+                        fprintf(stderr, "Missing filename\n");
+                        exit(1);
+                    }
+                    
+                    args[i] = NULL;
+                    int fd = open(filename, O_RDONLY, 0644);
+                    if (fd == -1) {
+                        perror("open failed");
+                    exit(1);
+                    }
+                    dup2(fd, STDIN_FILENO);
+                    close(fd);
+                }
+                else if (strcmp(args[i],">")==0){
+                    char *filename = args[i + 1];
+                    if (filename == NULL) {
+                        fprintf(stderr, "Missing filename\n");
+                        exit(1);
+                    }
+                    
+                    args[i] = NULL;
+                    int fd = open(filename, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+                    if (fd == -1) {
+                        perror("open failed");
+                    exit(1);
+                    }
+                    dup2(fd, STDOUT_FILENO);
+                    close(fd);
+                }
+                else if (strcmp(args[i],">>")==0){
+                    char *filename = args[i + 1];
+                    if (filename == NULL) {
+                        fprintf(stderr, "Missing filename\n");
+                        exit(1);
+                    }
+                    
+                    args[i] = NULL;
+                    int fd = open(filename, O_WRONLY | O_CREAT | O_APPEND, 0644);
+                    if (fd == -1) {
+                        perror("open failed");
+                    exit(1);
+                    }
+                    dup2(fd, STDOUT_FILENO);
+                    close(fd);
+                }
+            
+            }
+            child(args, argsc);
+        }
+        if (rc<0){
+            perror("rc<0");
+        }
+        
+}
