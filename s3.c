@@ -7,7 +7,7 @@ void construct_shell_prompt(char shell_prompt[])
 }
 
 ///Prints a shell prompt and reads input from the user
-void read_command_line(char line[])
+void read_command_line(char line[], char lwd[])
 {
     char shell_prompt[MAX_PROMPT_LEN];
     construct_shell_prompt(shell_prompt);
@@ -161,4 +161,61 @@ void launch_program_with_redirection(char *args[], int argsc){
             perror("rc<0");
         }
         
+}
+void init_lwd(char lwd[]){
+    getcwd(lwd, MAX_PROMPT_LEN-6);
+};
+
+int is_cd(char line[]){
+    int i =0;
+    while (line[i]==' '){
+        i++;
+    }
+    if (line[i]=='c'){
+        if (line[i+1]=='d'){
+            if (line[i+2]==' '|| line[i+2] == '\0'){
+                return 1;
+            }
+        }
+
+    }
+    return 0;
+
+}
+
+void run_cd(char *args[], int argsc, char lwd[]){
+    char *home = getenv("HOME");
+    char old_dir[MAX_PROMPT_LEN - 6];
+
+    if (getcwd(old_dir, sizeof(old_dir)) == NULL) {
+        fprintf(stderr, "getcwd failed\n");
+        return;
+    }
+
+    if (args[1] == NULL){  // If only cd then go to home directory
+        if (home == NULL) {
+            fprintf(stderr, "HOME not found\n");
+            return;
+        }
+
+        if (chdir(home) == 0) {
+            strcpy(lwd, old_dir);
+        } else {
+            fprintf(stderr, "chdir failed\n");
+        }
+    }
+    else if (strcmp(args[1], "-") == 0){  // Go back to previous directory
+        if (chdir(lwd) == 0) {
+            strcpy(lwd, old_dir);
+        } else {
+            fprintf(stderr, "chdir failed\n");
+        }
+    }
+    else{
+        if (chdir(args[1]) == 0) {
+            strcpy(lwd, old_dir);
+        } else {
+            fprintf(stderr, "chdir failed\n");
+        }
+    }
 }
