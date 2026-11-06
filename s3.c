@@ -1,36 +1,36 @@
 #include "s3.h"
 
-///Simple for now, but will be expanded in a following section
+/// Simple for now, but will be expanded in a following section
 void construct_shell_prompt(char shell_prompt[])
 {
     strcpy(shell_prompt, "[s3]$ ");
 }
 
-///Prints a shell prompt and reads input from the user
-void read_command_line(char line[], char lwd[])
+/// Prints a shell prompt and reads input from the user
+void read_command_line(char line[])
 {
     char shell_prompt[MAX_PROMPT_LEN];
     construct_shell_prompt(shell_prompt);
     printf("%s", shell_prompt);
 
-    ///See man page of fgets(...)
+    /// See man page of fgets(...)
     if (fgets(line, MAX_LINE, stdin) == NULL)
     {
         perror("fgets failed");
         exit(1);
     }
-    ///Remove newline (enter)
+    /// Remove newline (enter)
     line[strlen(line) - 1] = '\0';
 }
 
 void parse_command(char line[], char *args[], int *argsc)
 {
-    ///Implements simple tokenization (space delimited)
-    ///Note: strtok puts '\0' (null) characters within the existing storage, 
-    ///to split it into logical cstrings.
-    ///There is no dynamic allocation.
+    /// Implements simple tokenization (space delimited)
+    /// Note: strtok puts '\0' (null) characters within the existing storage,
+    /// to split it into logical cstrings.
+    /// There is no dynamic allocation.
 
-    ///See the man page of strtok(...)
+    /// See the man page of strtok(...)
     char *token = strtok(line, " ");
     *argsc = 0;
     while (token != NULL && *argsc < MAX_ARGS - 1)
@@ -38,184 +38,150 @@ void parse_command(char line[], char *args[], int *argsc)
         args[(*argsc)++] = token;
         token = strtok(NULL, " ");
     }
-    
-    args[*argsc] = NULL; ///args must be null terminated
+
+    args[*argsc] = NULL; /// args must be null terminated
 }
 
-///Launch related functions
+/// Launch related functions
 void child(char *args[], int argsc)
 {
-    ///Implement this function:
+    /// Implement this function:
 
-    ///Use execvp to load the binary 
-    ///of the command specified in args[ARG_PROGNAME].
-    ///For reference, see the code in lecture 3.
-    execvp(args[ARG_PROGNAME], args);
-    perror("execvp failed");
+    /// Use execvp to load the binary
+    /// of the command specified in args[ARG_PROGNAME].
+    /// For reference, see the code in lecture 3.
+    execvp(args[0], args);
+    exit(1);
+}
+
+void child_with_input_redirect(char *args[], int argsc, char file[])
+{
+    int fd = open(file, O_RDONLY);
+    if (fd == -1)
+    {
+        perror("open");
+        exit(1);
+    }
+    dup2(fd, STDIN_FILENO);
+    close(fd);
+    execvp(args[0], args);
+    exit(1);
+}
+void child_with_output_redirect(char *args[], int argsc, char file[], bool append)
+{   
+    int fd;
+    if (append)
+    {
+        fd = open(file, O_WRONLY | O_CREAT | O_APPEND, 0644); // chmod 0664
+    }
+    else
+    {
+        fd = open(file, O_WRONLY | O_CREAT | O_TRUNC, 0644); // chmod 0664
+    }
+    if (fd == -1)
+    {
+        perror("open");
+        exit(1);
+    }
+    dup2(fd, STDOUT_FILENO);
+    close(fd);
+    execvp(args[0], args);
     exit(1);
 }
 
 void launch_program(char *args[], int argsc)
 {
-    ///Implement this function:
+    /// Implement this function:
 
-    ///fork() a child process.
-    ///In the child part of the code,
-    ///call child(args, argv)
-    ///For reference, see the code in lecture 2.
+    /// fork() a child process.
+    /// In the child part of the code,
+    /// call child(args, argv)
+    /// For reference, see the code in lecture 2.
 
-    ///Handle the 'exit' command;
-    ///so that the shell, not the child process,
-    ///exits.
+    /// Handle the 'exit' command;
+    /// so that the shell, not the child process,
+    /// exits.
 
-    if (argsc == 0)
+    if (argsc > 0 && strcmp(args[0], "exit") == 0)
     {
-        return;
-    }
-    if (strcmp(args[0], "exit")==0){
         exit(0);
     }
+
     int rc = fork();
-    
-    if (rc == 0){
+    if (rc < 0)
+    {
+        // Error
+        fprintf(stderr, "fork failed\n");
+        exit(1);
+    }
+    else if (rc == 0)
+    {
+        // Child
         child(args, argsc);
     }
-    if (rc<0){
-        perror("rc<0");
+    else
+    {
+        // Parent
     }
-    
-
 }
 
-int command_with_redirection(char line[]){
-    for (int i = 0; i < strlen(line); i++){
-        if (line[i]=='<'){
-            return(1);
+///
+bool command_with_redirection(char line[])
+{
+    for (int i = 0; i < strlen(line); ++i)
+    {
+        if (line[i] == '>' || line[i] == '<')
+        {
+            return 1;
         }
-        if (line[i]=='>'){
-            return(1);
-        }
-
-    }
-    return(0);
-
-}
-void launch_program_with_redirection(char *args[], int argsc){
-    int rc = fork();
-        if (rc == 0){
-
-            for (int i = 0; i < argsc; i++){
-                char *filename = args[i + 1];
-                if (strcmp(args[i],"<")==0){
-                    if (filename == NULL) {
-                        fprintf(stderr, "Missing filename\n");
-                        exit(1);
-                    }
-                    
-                    args[i] = NULL;
-                    int fd = open(filename, O_RDONLY, 0644);
-                    if (fd == -1) {
-                        perror("open failed");
-                    exit(1);
-                    }
-                    dup2(fd, STDIN_FILENO);
-                    close(fd);
-                }
-                else if (strcmp(args[i],">")==0){
-                    char *filename = args[i + 1];
-                    if (filename == NULL) {
-                        fprintf(stderr, "Missing filename\n");
-                        exit(1);
-                    }
-                    
-                    args[i] = NULL;
-                    int fd = open(filename, O_WRONLY | O_CREAT | O_TRUNC, 0644);
-                    if (fd == -1) {
-                        perror("open failed");
-                    exit(1);
-                    }
-                    dup2(fd, STDOUT_FILENO);
-                    close(fd);
-                }
-                else if (strcmp(args[i],">>")==0){
-                    char *filename = args[i + 1];
-                    if (filename == NULL) {
-                        fprintf(stderr, "Missing filename\n");
-                        exit(1);
-                    }
-                    
-                    args[i] = NULL;
-                    int fd = open(filename, O_WRONLY | O_CREAT | O_APPEND, 0644);
-                    if (fd == -1) {
-                        perror("open failed");
-                    exit(1);
-                    }
-                    dup2(fd, STDOUT_FILENO);
-                    close(fd);
-                }
-            
-            }
-            child(args, argsc);
-        }
-        if (rc<0){
-            perror("rc<0");
-        }
-        
-}
-void init_lwd(char lwd[]){
-    getcwd(lwd, MAX_PROMPT_LEN-6);
-};
-
-int is_cd(char line[]){
-    int i =0;
-    while (line[i]==' '){
-        i++;
-    }
-    if (line[i]=='c'){
-        if (line[i+1]=='d'){
-            if (line[i+2]==' '|| line[i+2] == '\0'){
-                return 1;
-            }
-        }
-
     }
     return 0;
-
 }
 
-void run_cd(char *args[], int argsc, char lwd[]){
-    char *home = getenv("HOME");
-    char old_dir[MAX_PROMPT_LEN - 6];
-
-    if (getcwd(old_dir, sizeof(old_dir)) == NULL) {
-        fprintf(stderr, "getcwd failed\n");
-        return;
+///
+void launch_program_with_redirection(char *args[], int argsc)
+{
+    if (argsc > 0 && strcmp(args[0], "exit") == 0)
+    {
+        exit(0);
     }
 
-    if (args[1] == NULL){  // If only cd then go to home directory
-        if (home == NULL) {
-            fprintf(stderr, "HOME not found\n");
-            return;
-        }
-
-        if (chdir(home) == 0) {
-            strcpy(lwd, old_dir);
-        } else {
-            fprintf(stderr, "chdir failed\n");
-        }
+    int rc = fork();
+    if (rc < 0)
+    {
+        // Error
+        fprintf(stderr, "fork failed\n");
+        exit(1);
     }
-    else if (strcmp(args[1], "-") == 0){  // Go back to previous directory
-        if (chdir(lwd) == 0) {
-            strcpy(lwd, old_dir);
-        } else {
-            fprintf(stderr, "chdir failed\n");
+    else if (rc == 0)
+    {
+        // Child
+        // store first and second half then pass
+        for (int i = 0; i < argsc; ++i)
+        {
+            if (strcmp(args[i], "<") == 0)
+            {
+                char *file = args[i + 1];
+                args[i] = NULL;
+                child_with_input_redirect(args, i, file);
+            }
+            else if (strcmp(args[i], ">") == 0)
+            {   
+                char *file = args[i + 1];
+                args[i] = NULL;
+                child_with_output_redirect(args, i, file, false);
+            }
+            else if (strcmp(args[i], ">>") == 0)
+            {
+                char *file = args[i + 1];
+                args[i] = NULL;
+                child_with_output_redirect(args, i, file, true);
+            }
         }
+        child(args, argsc);
     }
-    else{
-        if (chdir(args[1]) == 0) {
-            strcpy(lwd, old_dir);
-        } else {
-            fprintf(stderr, "chdir failed\n");
-        }
+    else
+    {
+        // Parent
     }
 }
