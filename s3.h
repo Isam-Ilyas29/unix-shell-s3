@@ -36,7 +36,7 @@ static inline void reap()
 }
 
 ///Shell I/O and related functions (add more as appropriate)
-void read_command_line(char line[]);
+void read_command_line(char line[], char lwd[]);
 void construct_shell_prompt(char shell_prompt[]);
 void parse_command(char line[], char *args[], int *argsc);
 
@@ -51,4 +51,9 @@ void launch_program(char *args[], int argsc);
 ///Redirection functions
 bool command_with_redirection(char line[]);
 void launch_program_with_redirection(char *args[], int argsc);
+
+///Change directory functions
+void init_lwd(char lwd[]);
+bool is_cd(char line[]);
+void run_cd(char *args[], int argsc, char lwd[]);
 #endif

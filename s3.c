@@ -3,11 +3,13 @@
 /// Simple for now, but will be expanded in a following section
 void construct_shell_prompt(char shell_prompt[])
 {
-    strcpy(shell_prompt, "[s3]$ ");
+    char cwd[MAX_PROMPT_LEN-7];
+    getcwd(cwd, MAX_PROMPT_LEN-6);
+    snprintf(shell_prompt, MAX_PROMPT_LEN, "[%s s3]$ ", cwd);
 }
 
 /// Prints a shell prompt and reads input from the user
-void read_command_line(char line[])
+void read_command_line(char line[], char lwd[])
 {
     char shell_prompt[MAX_PROMPT_LEN];
     construct_shell_prompt(shell_prompt);
@@ -51,20 +53,24 @@ void child(char *args[], int argsc)
     /// of the command specified in args[ARG_PROGNAME].
     /// For reference, see the code in lecture 3.
     execvp(args[0], args);
+    perror(args[0]); // Unrecognised command
     exit(1);
 }
 
 void child_with_input_redirect(char *args[], int argsc, char file[])
 {
     int fd = open(file, O_RDONLY);
+
     if (fd == -1)
     {
         perror("open");
         exit(1);
     }
+
     dup2(fd, STDIN_FILENO);
     close(fd);
     execvp(args[0], args);
+    perror(args[0]); // Unrecognised command
     exit(1);
 }
 void child_with_output_redirect(char *args[], int argsc, char file[], bool append)
@@ -78,14 +84,17 @@ void child_with_output_redirect(char *args[], int argsc, char file[], bool appen
     {
         fd = open(file, O_WRONLY | O_CREAT | O_TRUNC, 0644); // chmod 0664
     }
+
     if (fd == -1)
     {
         perror("open");
         exit(1);
     }
+
     dup2(fd, STDOUT_FILENO);
     close(fd);
     execvp(args[0], args);
+    perror(args[0]); // Unrecognised command
     exit(1);
 }
 
@@ -183,5 +192,53 @@ void launch_program_with_redirection(char *args[], int argsc)
     else
     {
         // Parent
+    }
+}
+
+void init_lwd(char lwd[])
+{
+    getcwd(lwd, MAX_PROMPT_LEN-6);
+}
+
+bool is_cd(char line[])
+{
+    int i = 0;
+    while (line[i] == ' ') i++;
+    if (line[i] == 'c' && line[i+1] == 'd' && (line[i+2] == ' ' || line[i+2] == '\0')) return true;
+    return false;
+}
+
+void run_cd(char *args[], int argsc, char lwd[])
+{
+    char* target;
+
+    if (argsc == 1)
+    {
+        target = getenv("HOME");
+    }
+    else if (argsc == 2 && strcmp(args[1], "-") == 0)
+    {
+        target = lwd;
+    }
+    else if (argsc == 2)
+    {
+        target = args[1];
+    }
+    else
+    {
+        fprintf(stderr, "cd: too many arguments\n");
+        return;
+    }
+
+    char prev[MAX_PROMPT_LEN-6];
+    getcwd(prev, MAX_PROMPT_LEN-6); // TODO: why is this line necessary?
+
+    if (chdir(target) == -1)
+    {
+        perror("cd");
+    }
+    else
+    {
+        strcpy(lwd, prev);
     }
 }
