@@ -1,3 +1,4 @@
+
 #ifndef _S3_H_
 #define _S3_H_
 
@@ -10,6 +11,7 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <sys/wait.h>
+#include <stdbool.h>
 
 ///Constants for array sizes, defined for clarity and code readability
 #define MAX_LINE 1024
@@ -41,13 +43,23 @@ void parse_command(char line[], char *args[], int *argsc);
 
 ///Child functions (add more as appropriate)
 void child(char *args[], int argsc);
+void child_with_input_redirect(char *args[], int argsc, char file[]);
+void child_with_output_redirect(char *args[], int argsc, char file[], bool append);
 
 ///Program launching functions (add more as appropriate)
 void launch_program(char *args[], int argsc);
-int command_with_redirection(char line[]);
+
+///Redirection functions
+bool command_with_redirection(char line[]);
 void launch_program_with_redirection(char *args[], int argsc);
+
+///Change directory functions
 void init_lwd(char lwd[]);
-int is_cd(char line[]);
+bool is_cd(char line[]);
 void run_cd(char *args[], int argsc, char lwd[]);
 
+///Pipe Functions
+bool is_pipe(char line[]);
+void tokenize_pipe(char *args[], int argsc,char *commands[][MAX_ARGS], int *commandnbr);
+void launch_pipe(char *commands[][MAX_ARGS], int commandnbr);
 #endif
