@@ -150,50 +150,109 @@ bool command_with_redirection(char line[])
 }
 
 ///
-void launch_program_with_redirection(char *args[], int argsc)
-{
-    if (argsc > 0 && strcmp(args[0], "exit") == 0)
-    {
+void launch_program_with_redirection(char *args[], int argsc, char lwd[]) {
+    if (argsc > 0 && strcmp(args[0], "exit") == 0) {
         exit(0);
     }
 
     int rc = fork();
-    if (rc < 0)
-    {
-        // Error
+
+    if (rc < 0) {
         fprintf(stderr, "fork failed\n");
         exit(1);
     }
-    else if (rc == 0)
-    {
-        // Child
-        // store first and second half then pass
-        for (int i = 0; i < argsc; ++i)
-        {
-            if (strcmp(args[i], "<") == 0)
-            {
+    else if (rc == 0) {
+
+        for (int i = 0; i < argsc; ++i) {
+
+            if (strcmp(args[i], "<") == 0) {
                 char *file = args[i + 1];
                 args[i] = NULL;
-                child_with_input_redirect(args, i, file);
+
+                char line[MAX_LINE] = "";
+
+                for (int j = 0; j < i; j++) {
+                    if (j > 0) strcat(line, " ");
+                    strcat(line, args[j]);
+                }
+                if (is_subshell(line)) {
+                    int fd = open(file, O_RDONLY);
+                    if (fd == -1) {
+                        perror("open");
+                        _exit(1);
+                    }
+                    dup2(fd, STDIN_FILENO);
+                    close(fd);
+                    execute_command(line, lwd);
+                    _exit(0);
+                }
+                else {
+                    child_with_input_redirect(args, i, file);
+                }
             }
-            else if (strcmp(args[i], ">") == 0)
-            {   
+
+            else if (strcmp(args[i], ">") == 0) {
                 char *file = args[i + 1];
                 args[i] = NULL;
-                child_with_output_redirect(args, i, file, false);
+
+                char line[MAX_LINE] = "";
+
+                for (int j = 0; j < i; j++) {
+                    if (j > 0) strcat(line, " ");
+                    strcat(line, args[j]);
+                }
+
+                if (is_subshell(line)) {
+                    int fd = open(file, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+
+                    if (fd == -1) {
+                        perror("open");
+                        _exit(1);
+                    }
+
+                    dup2(fd, STDOUT_FILENO);
+                    close(fd);
+
+                    execute_command(line, lwd);
+                    _exit(0);
+                }
+                else {
+                    child_with_output_redirect(args, i, file, false);
+                }
             }
-            else if (strcmp(args[i], ">>") == 0)
-            {
+
+            else if (strcmp(args[i], ">>") == 0) {
                 char *file = args[i + 1];
                 args[i] = NULL;
-                child_with_output_redirect(args, i, file, true);
+
+                char line[MAX_LINE] = "";
+
+                for (int j = 0; j < i; j++) {
+                    if (j > 0) strcat(line, " ");
+                    strcat(line, args[j]);
+                }
+
+                if (is_subshell(line)) {
+                    int fd = open(file, O_WRONLY | O_CREAT | O_APPEND, 0644);
+
+                    if (fd == -1) {
+                        perror("open");
+                        _exit(1);
+                    }
+
+                    dup2(fd, STDOUT_FILENO);
+                    close(fd);
+
+                    execute_command(line, lwd);
+                    _exit(0);
+                }
+                else {
+                    child_with_output_redirect(args, i, file, true);
+                }
             }
         }
+
         child(args, argsc);
-    }
-    else
-    {
-        // Parent
     }
 }
 
@@ -245,37 +304,52 @@ void run_cd(char *args[], int argsc, char lwd[])
     }
 }
 
-bool is_pipe(char line[])
-{
-    int i = 0;
-    while (line[i] != '\0') {
-        if (line[i] == '|') return true;
-        i++;
-    }
-    return false;
-}  
-
-void tokenize_pipe(char *args[], int argsc,char *commands[][MAX_ARGS], int *commandnbr){ //outcount is a count of the overall index first count keeps the index where we see | and incount counts for stdin
-    int i = 0;              // Position in the original args[]
-    int command_index = 0;  // Which command we're filling
-    int argument_index = 0; // Which argument in that command
-    while (i < argsc) {
-        if (strcmp(args[i], "|") == 0){
-           commands[command_index][argument_index] =NULL;
-           command_index++;
-           argument_index =0;
-           i++;
-           continue;
+bool is_pipe(char line[]) {
+    int parentheses_count = 0;
+    for (int i = 0; line[i] != '\0'; i++) {
+        if (line[i] == '(') {
+            parentheses_count++;
         }
-        commands[command_index][argument_index++]= args[i];
-        i++;
-
+        else if (line[i] == ')') {
+            parentheses_count--;
+        }
+        else if (line[i] == '|' && parentheses_count == 0) {
+            return true;
+        }
     }
-commands[command_index][argument_index] = NULL;
-*commandnbr =command_index +1;
+
+    return false;
 }
 
-void launch_pipe (char *commands[][MAX_ARGS], int commandnbr){
+void tokenize_pipe(char *args[], int argsc, char *commands[][MAX_ARGS], int *commandnbr) {
+    int i = 0;
+    int command_index = 0;
+    int argument_index = 0;
+    int parentheses_count = 0;
+    while (i < argsc) {
+        for (int j = 0; args[i][j] != '\0'; j++) {
+            if (args[i][j] == '(') {
+                parentheses_count++;
+            }
+            if (args[i][j] == ')') {
+                parentheses_count--;
+            }
+        }
+        if (strcmp(args[i], "|") == 0 && parentheses_count == 0) {
+            commands[command_index][argument_index] = NULL;
+            command_index++;
+            argument_index = 0;
+            i++;
+            continue;
+        }
+        commands[command_index][argument_index++] = args[i];
+        i++;
+    }
+    commands[command_index][argument_index] = NULL;
+    *commandnbr = command_index + 1;
+}
+
+void launch_pipe (char *commands[][MAX_ARGS], int commandnbr, char lwd[]){
     int fd[MAX_ARGS][2];
     
     for (int i = 0; i < commandnbr - 1; i++) {
@@ -304,8 +378,18 @@ void launch_pipe (char *commands[][MAX_ARGS], int commandnbr){
                 close(fd[j][1]);
             
             }
-            child(commands[i],0);
-        }
+            char line[MAX_LINE] = "";
+
+            for (int j = 0; commands[i][j] != NULL; j++) {
+                if (j > 0) {
+                    strcat(line, " ");
+                }
+                strcat(line, commands[i][j]);
+            }
+
+            execute_command(line, lwd);
+            _exit(0);
+            }
             
         
         }
@@ -318,4 +402,195 @@ void launch_pipe (char *commands[][MAX_ARGS], int commandnbr){
     for (int j = 0; j < commandnbr; j++) {
             wait(NULL);
 }
+}
+
+
+bool is_semicolon(char line[]) {
+    int parentheses_count = 0;
+
+    for (int i = 0; line[i] != '\0'; i++) {
+        if (line[i] == '(') {
+            parentheses_count++;
+        }
+        else if (line[i] == ')') {
+            parentheses_count--;
+        }
+        else if (line[i] == ';' && parentheses_count == 0) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+void tokenize_semicolon(char *args[], int argsc,char *commands_semicolon[][MAX_ARGS], int *commandnbr_semicolon){ //outcount is a count of the overall index first count keeps the index where we see | and incount counts for stdin
+    int i = 0;              // Position in the original args[]
+    int command_index = 0;  // Which command we're filling
+    int argument_index = 0; // Which argument in that command
+    int parentheses_count = 0;
+    while (i < argsc) {
+        for (int j = 0; args[i][j] != '\0'; j++) {
+            if (args[i][j] == '(') {
+                parentheses_count++;
+            }
+            if (args[i][j] == ')') {
+                parentheses_count--;
+            }
+        }
+
+        if ((strcmp(args[i], ";") == 0) && (parentheses_count == 0)){
+           commands_semicolon[command_index][argument_index] =NULL;
+           command_index++;
+           argument_index =0;
+           i++;
+           continue;
+        }
+        commands_semicolon[command_index][argument_index++]= args[i];
+        i++;
+
+    }
+commands_semicolon[command_index][argument_index] = NULL;
+*commandnbr_semicolon =command_index +1;
+}
+
+void launch_semicolon(char *commands_semicolon[][MAX_ARGS],int commandnbr_semicolon, char lwd[]) {
+
+    for (int i = 0; i < commandnbr_semicolon; i++) {
+
+        char line[MAX_LINE] = "";
+
+        for (int j = 0; commands_semicolon[i][j] != NULL; j++) {
+            if (j > 0) {
+                strcat(line, " ");
+            }
+
+            strcat(line, commands_semicolon[i][j]);
+        }
+
+        execute_command(line, lwd);
+    }
+}
+
+void execute_command(char line[], char lwd[]) {
+    char *args[MAX_ARGS];
+    int argsc;
+
+    char *commands[MAX_ARGS][MAX_ARGS];
+    int commandnbr;
+
+    char *commands_semicolon[MAX_ARGS][MAX_ARGS];
+    int commandnbr_semicolon;
+    if (is_subshell(line)) {
+        char subshell_line[MAX_LINE];
+
+        tokenize_subshell(line, subshell_line);
+        launch_subshell(subshell_line, lwd);
+    }
+    else if (is_semicolon(line)) {
+        parse_command(line, args, &argsc);
+        tokenize_semicolon(args, argsc, commands_semicolon, &commandnbr_semicolon);
+        launch_semicolon(commands_semicolon, commandnbr_semicolon, lwd);
+    }
+    
+    else if (is_cd(line)) {
+        parse_command(line, args, &argsc);
+        run_cd(args, argsc, lwd);
+    }
+    else if (is_pipe(line)) {
+        parse_command(line, args, &argsc);
+        tokenize_pipe(args, argsc, commands, &commandnbr);
+        launch_pipe(commands, commandnbr, lwd);
+    }
+    else if (command_with_redirection(line)) {
+        parse_command(line, args, &argsc);
+        launch_program_with_redirection(args, argsc, lwd);
+        reap();
+    }
+    else {
+        parse_command(line, args, &argsc);
+        if (argsc == 0) {
+            return;
+        }
+        launch_program(args, argsc);
+        reap();
+    }
+}
+
+bool is_subshell(char line[]) {
+    int parentheses_count = 0;
+    int start = 0;
+
+    while (line[start] == ' ') {
+        start++;
+    }
+    if (line[start] != '(') {
+        return false;
+    }
+
+    for (int i = start; line[i] != '\0'; i++) {
+        if (line[i] == '(') {
+            parentheses_count++;
+        }
+
+        if (line[i] == ')') {
+            parentheses_count--;
+        }
+        if (parentheses_count < 0) {
+            return false;
+        }
+        if (parentheses_count == 0) {
+            for (int j = i + 1; line[j] != '\0'; j++) {
+                if (line[j] != ' ') {
+                    return false;
+                }
+            }
+            return true;
+        }
+    }
+    return false;
+}
+
+
+void tokenize_subshell(char line[], char subshell_line[]){
+    int parentheses_count = 0;
+    int j = 0;
+    
+
+    for (int i=0;line[i]!='\0';i++){
+        if ((line[i] =='(')){
+            parentheses_count++;
+            if (parentheses_count==1){
+                continue;
+            }
+            
+        }
+        if((line[i] ==')')){
+            parentheses_count--;
+            if(parentheses_count==0){
+                break;
+            }
+        }
+        if (parentheses_count>0){
+            subshell_line[j]=line[i];
+            j++;
+        }
+        
+
+    }
+    subshell_line[j]='\0';
+}
+void launch_subshell(char subshell_line[], char lwd[]){
+    int rc = fork();
+
+    if (rc<0){
+        fprintf(stderr, "fork failed\n");
+        exit(1);
+    }
+    else if (rc ==0) {
+        execute_command(subshell_line, lwd);
+        _exit(0);
+    } 
+    else{
+        wait(NULL);
+    }
 }

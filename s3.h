@@ -51,7 +51,7 @@ void launch_program(char *args[], int argsc);
 
 ///Redirection functions
 bool command_with_redirection(char line[]);
-void launch_program_with_redirection(char *args[], int argsc);
+void launch_program_with_redirection(char *args[], int argsc, char lwd[]);
 
 ///Change directory functions
 void init_lwd(char lwd[]);
@@ -61,5 +61,18 @@ void run_cd(char *args[], int argsc, char lwd[]);
 ///Pipe Functions
 bool is_pipe(char line[]);
 void tokenize_pipe(char *args[], int argsc,char *commands[][MAX_ARGS], int *commandnbr);
-void launch_pipe(char *commands[][MAX_ARGS], int commandnbr);
+void launch_pipe(char *commands[][MAX_ARGS], int commandnbr, char lwd[]);
+
+//Batched Commands
+bool is_semicolon(char line[]);
+void tokenize_semicolon(char *args[], int argsc, char *commands_semicolon[][MAX_ARGS], int *commandnbr_semicolon);
+void launch_semicolon(char *commands_semicolon[][MAX_ARGS],int commandnbr_semicolon, char lwd[]);
+
+//Execute all posibilites
+void execute_command(char line[], char lwd[]);
+
+// Subshell functions
+bool is_subshell(char line[]);
+void tokenize_subshell(char line[], char subshell_line[]);
+void launch_subshell(char subshell_line[], char lwd[]);
 #endif
